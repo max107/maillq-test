@@ -86,55 +86,66 @@ class LookupBuilderTest extends KernelTestCase
 
     public function lookupProvider(): array
     {
+        $example = [
+            [
+                ['and', [
+                    ['or', [
+                        ['email', 'exact', 'foo@bar.com'],
+                        ['email', 'exact', 'bar@foo.com']
+                    ]],
+                    ['and', [
+                        ['email', 'exact', 'foo@bar.com'],
+                    ]]
+                ]],
+                ['or', [
+                    ['email', 'exact', 'foo@bar.com'],
+                ]]
+            ]
+        ];
+
         return [
             [
                 [
-                    ['and' => [['email', 'exact', 'foo@bar.com']]]
+                    ['and', [['email', 'exact', 'foo@bar.com']]]
                 ],
                 'SELECT f FROM App\Entity\User f WHERE f.email = ?0',
                 1
             ],
             [
                 [
-                    ['or' => [['email', 'exact', 'foo@bar.com'], ['email', 'exact', 'bar@foo.com']]]
+                    ['or', [['email', 'exact', 'foo@bar.com'], ['email', 'exact', 'bar@foo.com']]]
                 ],
                 'SELECT f FROM App\Entity\User f WHERE f.email = ?0 OR f.email = ?1',
                 2
             ],
             [
                 [
-                    ['and' => [['id', 'exact', 1]]],
-                    ['or' => [['email', 'exact', 'foo@bar.com'], ['email', 'exact', 'bar@foo.com']]]
+                    ['and', [['id', 'exact', 1]]],
+                    ['or', [['email', 'exact', 'foo@bar.com'], ['email', 'exact', 'bar@foo.com']]]
                 ],
                 'SELECT f FROM App\Entity\User f WHERE f.id = ?0 AND (f.email = ?1 OR f.email = ?2)',
                 1
             ],
             [
                 [
-                    [
-                        'and' => [
-                            ['about__item', 'exact', 'country'],
-                            ['about__value', 'exact', 'russia']
-                        ],
-                    ],
+                    ['and', [
+                        ['about__item', 'exact', 'country'],
+                        ['about__value', 'exact', 'russia']
+                    ]],
                 ],
                 'SELECT f FROM App\Entity\User f LEFT JOIN f.about a WHERE a.item = ?0 AND a.value = ?1',
                 1
             ],
             [
                 [
-                    [
-                        'or' => [
-                            ['email', 'exact', 'foo@bar.com'],
-                            ['email', 'exact', 'bar@foo.com']
-                        ]
-                    ],
-                    [
-                        'and' => [
-                            ['about__item', 'exact', 'country'],
-                            ['about__value', 'exact', 'russia']
-                        ],
-                    ],
+                    ['or', [
+                        ['email', 'exact', 'foo@bar.com'],
+                        ['email', 'exact', 'bar@foo.com']
+                    ]],
+                    ['and', [
+                        ['about__item', 'exact', 'country'],
+                        ['about__value', 'exact', 'russia']
+                    ]],
                 ],
                 'SELECT f FROM App\Entity\User f LEFT JOIN f.about a WHERE a.item = ?0 AND a.value = ?1',
                 1
