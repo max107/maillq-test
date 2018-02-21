@@ -15,11 +15,14 @@ namespace App\LookupBuilder;
 use App\LookupBuilder\Lookup\LookupInterface;
 use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\EntityRepository;
+use Doctrine\ORM\Query\Expr\Comparison;
 use Doctrine\ORM\QueryBuilder;
 use Doctrine\ORM\Tools\SchemaTool;
 
 class LookupBuilder
 {
+    private const alias = 'f';
+
     /**
      * @var array
      */
@@ -27,11 +30,27 @@ class LookupBuilder
     /**
      * @var array
      */
-    protected $relations = [];
+    private $joins = [];
+
+    /**
+     * @var int
+     */
+    private $i = 0;
+
+    /**
+     * @var EntityRepository
+     */
+    private $repository;
+
     /**
      * @var array
      */
-    private $joins = [];
+    private $parameters = [];
+
+    /**
+     * @var QueryBuilder
+     */
+    private $qb;
 
     /**
      * @param string $name
@@ -44,62 +63,118 @@ class LookupBuilder
 
     /**
      * @param EntityRepository $repository
-     * @param array|null $array
-     * @return QueryBuilder
+     * @return $this
      */
-    public function parse(EntityRepository $repository, array $array): QueryBuilder
+    public function setEntityRepository(EntityRepository $repository)
     {
-        return $this->doParse($repository, $array);
+        $this->repository = $repository;
+        $this->qb = $repository->createQueryBuilder(self::alias);
+        return $this;
     }
 
     /**
-     * @param EntityRepository $repository
-     * @param array $array
+     * @param array|null $array
      * @return QueryBuilder
      */
-    protected function doParse(EntityRepository $repository, array $array): QueryBuilder
+    public function parse(array $array): QueryBuilder
     {
-        $rootAlias = 'f';
-        $qb = $repository->createQueryBuilder($rootAlias);
-        $parameters = [];
+        return $this->doParse($array);
+    }
 
-        $i = 0;
-        foreach ($array as $parts) {
-            foreach ($parts as $type => $conditions) {
-                $comparsions = [];
-                $method = sprintf("%sX", strtolower($type));
+    /**
+     * @param array $parts
+     * @return QueryBuilder
+     */
+    protected function doParse(array $parts): QueryBuilder
+    {
+        $criteria = $this->parseConditions($parts);
 
-                foreach ($conditions as $condition) {
-                    list($column, $name, $value) = $condition;
+        $this->qb->where($this->exprFromArray('and', $criteria));
+        $this->qb->setParameters($this->parameters);
 
-                    $lookup = $this->getLookup($name);
-                    $parameters[] = $value;
+        return $this->qb;
+    }
 
-                    if (strpos($column, '__') !== false) {
-                        list($relation, $relationColumn) = explode('__', $column);
-                        if (array_key_exists($relation, $this->joins)) {
-                            $alias = $this->joins[$relation];
-                        } else {
-                            $this->joins[$relation] = $alias = substr($relation, 0, 1);
-                            $qb->leftJoin(
-                                sprintf("%s.%s", $rootAlias, $relation),
-                                $alias
-                            );
-                        }
+    protected function buildJoin($tableAlias, $relation): string
+    {
+        if (array_key_exists($relation, $this->joins)) {
+            $alias = $this->joins[$relation];
+        } else {
+            $this->joins[$relation] = $alias = substr($relation, 0, 1);
+            $this->qb->leftJoin(
+                sprintf("%s.%s", $tableAlias, $relation),
+                $alias
+            );
+        }
 
-                        $comparsions[] = $lookup->parse($qb, $alias, $i, $relationColumn);
-                    } else {
-                        $comparsions[] = $lookup->parse($qb, $rootAlias, $i, $column);
-                    }
+        return $alias;
+    }
 
-                    $i++;
-                }
+    /**
+     * @param $condition
+     * @return Comparison
+     */
+    protected function parseLookup(array $condition)
+    {
+        list($column, $name, $value) = $condition;
 
-                $qb->andWhere(call_user_func_array([$qb->expr(), $method], $comparsions));
+        $comparison = $this->parseCondition($column, $this->getLookup($name));
+        $this->addParameter($value);
+
+        return $comparison;
+    }
+
+    /**
+     * @param $value
+     * @return $this
+     */
+    protected function addParameter($value)
+    {
+        $this->parameters[] = $value;
+        $this->i++;
+
+        return $this;
+    }
+
+    /**
+     * @param $column
+     * @param LookupInterface $lookup
+     * @return mixed
+     */
+    protected function parseCondition($column, LookupInterface $lookup)
+    {
+        if (strpos($column, '__') !== false) {
+            list($relation, $relationColumn) = explode('__', $column);
+            $alias = $this->buildJoin(self::alias, $relation);
+
+            return $lookup->parse($this->qb, $alias, $this->i, $relationColumn);
+        } else {
+            return $lookup->parse($this->qb, self::alias, $this->i, $column);
+        }
+    }
+
+    protected function exprFromArray(string $type, array $expressions)
+    {
+        return call_user_func_array(
+            [$this->qb->expr(), sprintf("%sX", strtolower($type))],
+            $expressions
+        );
+    }
+
+    protected function parseConditions(array $conditions)
+    {
+        $parts = [];
+        foreach ($conditions as $condition) {
+            if (in_array(current($condition), ['and', 'or'])) {
+                list($type, $children) = $condition;
+
+                $parts[] = $this->exprFromArray($type, $this->parseConditions($children));
+            } else {
+                $parts[] = $this->parseLookup($condition);
             }
         }
 
-        return $qb->setParameters($parameters);
+        return $parts;
     }
 
     /**
@@ -116,13 +191,5 @@ class LookupBuilder
         }
 
         return $lookup;
-    }
-
-    /**
-     * @param array $relations
-     */
-    public function setAllowedRelations(array $relations)
-    {
-        $this->relations = $relations;
     }
 }

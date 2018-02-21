@@ -70,7 +70,6 @@ class LookupBuilderTest extends KernelTestCase
 
         $this->lb = new LookupBuilder();
         $this->lb->registerLookup('exact', new ExactLookup());
-        $this->lb->setAllowedRelations(['about']);
     }
 
     /**
@@ -138,16 +137,18 @@ class LookupBuilderTest extends KernelTestCase
             ],
             [
                 [
-                    ['or', [
-                        ['email', 'exact', 'foo@bar.com'],
-                        ['email', 'exact', 'bar@foo.com']
-                    ]],
                     ['and', [
-                        ['about__item', 'exact', 'country'],
-                        ['about__value', 'exact', 'russia']
+                        ['or', [
+                            ['email', 'exact', 'foo@bar.com'],
+                            ['email', 'exact', 'bar@foo.com']
+                        ]],
+                        ['and', [
+                            ['about__item', 'exact', 'country'],
+                            ['about__value', 'exact', 'russia']
+                        ]],
                     ]],
                 ],
-                'SELECT f FROM App\Entity\User f LEFT JOIN f.about a WHERE a.item = ?0 AND a.value = ?1',
+                'SELECT f FROM App\Entity\User f LEFT JOIN f.about a WHERE (f.email = ?0 OR f.email = ?1) AND (a.item = ?2 AND a.value = ?3)',
                 1
             ],
         ];
@@ -162,7 +163,10 @@ class LookupBuilderTest extends KernelTestCase
     public function testLookupBuilder(array $userConditions, string $expectedDql, int $expectedCount)
     {
         $repository = $this->em->getRepository(User::class);
-        $qb = $this->lb->parse($repository, $userConditions);
+        $qb = $this->lb
+            ->setEntityRepository($repository)
+            ->parse($userConditions);
+
         $query = $qb->getQuery();
         $this->assertSame($expectedDql, $query->getDQL());
         $this->assertCount($expectedCount, $query->getResult(AbstractQuery::HYDRATE_ARRAY));

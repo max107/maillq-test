@@ -14,16 +14,18 @@ namespace App\LookupBuilder\Lookup;
 
 use Doctrine\ORM\QueryBuilder;
 
-class ExactLookup implements LookupInterface
+class IsNotExactLookup implements LookupInterface
 {
     /**
      * {@inheritdoc}
      */
     public function parse(QueryBuilder $builder, string $alias, int $number, string $column)
     {
-        return $builder->expr()->eq(
-            sprintf('%s.%s', $alias, $column),
-            sprintf("?%d", $number)
+        return $builder->expr()->not(
+            $builder->expr()->eq(
+                sprintf('%s.%s', $alias, $column),
+                sprintf("?%d", $number)
+            )
         );
     }
 }

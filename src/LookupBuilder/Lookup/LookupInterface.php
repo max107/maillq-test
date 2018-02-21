@@ -16,5 +16,12 @@ use Doctrine\ORM\QueryBuilder;
 
 interface LookupInterface
 {
-    public function parse(QueryBuilder $builder, string $alias, int $number, string $key);
+    /**
+     * @param QueryBuilder $builder
+     * @param string $alias column alias
+     * @param int $number value placeholder
+     * @param string $column
+     * @void
+     */
+    public function parse(QueryBuilder $builder, string $alias, int $number, string $column);
 }
